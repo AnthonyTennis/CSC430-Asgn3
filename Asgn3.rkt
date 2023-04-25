@@ -1,5 +1,5 @@
 #lang typed/racket
-;hey
+
 ;Authors: Anthony Teciorowski, Scott Hufschmidt
 
 (require typed/rackunit)
@@ -13,14 +13,24 @@
 (struct leq0 ([exp : ExprC]))
 (define-type binop (U '+ '- '* '/))
 
-; Lookup table for binary operators
-;(define binop-lookup
-;  (make-immutable-hash
-;   (list
-;     (cons '+ +)
-;     (cons '- -)
-;     (cons '* *)
-;     (cons '/ /)))
+; Determines if symbol is a valid operator
+(define (binop? [v : Sexp]) : Boolean
+  (if (symbol? v)
+      (match v
+        ['+ #t]
+        ['- #t]
+        ['* #t]
+        ['/ #t]
+        [_ #f])
+      (error 'binop? "VVQS given op was not a symbol ~e" v)))
+
+(check-true (binop? '+))
+(check-true (binop? '-))
+(check-true (binop? '*))
+(check-true (binop? '/))
+(check-false (binop? 's))
+(check-exn (regexp (regexp-quote "VVQS given op was not a symbol"))
+           (lambda () (binop? 1)))
 
 
 ; ---------------------------------------------------
@@ -32,7 +42,7 @@
     [(? real? n) (NumC n)]
     [(list op arg1 arg2)
      (match op
-       [(? (lambda (x) (member x (list '+ '- '* '/)))) (BinopC op (parse arg1) (parse arg2))]
+       [(? binop? op) (BinopC (cast op binop) (parse arg1) (parse arg2))]
        [_ (error 'parse "VVQS invalid list input ~e" s)])]
     [_ (error 'parse "VVQS invalid input ~e" s)]))
 
@@ -57,3 +67,28 @@
 ; ---------------------------------------------------
 ; Interpreter and tests
 
+; Lookup table for binary operators
+(define (binop-exec [b : ExprC]) : Real
+  (match b
+    [(NumC n) n]
+    [(BinopC '+ l r) (+ (binop-exec l) (binop-exec r))]
+    [(BinopC '- l r) (- (binop-exec l) (binop-exec r))]
+    [(BinopC '* l r) (* (binop-exec l) (binop-exec r))]
+    [(BinopC '/ l r) (/ (binop-exec l) (binop-exec r))]
+    ))
+
+(define (interp [exp : ExprC]) : Real
+  (match exp
+    [(NumC n) n]
+    [(IdC s) (error 'interp "VVQS unbound identifier: ~a" s)]
+    [(BinopC op l r) (binop-exec exp)]
+    ;[_ (error 'interp "VVQS invalid operator: ~a" exp)]
+    ))
+
+(check-equal? (interp (NumC 2)) 2)
+(check-equal? (interp (parse '(+ 1 2))) 3)
+(check-equal? (interp (parse '(* 3 4))) 12)
+(check-equal? (interp (parse '(- 2 1))) 1)
+(check-equal? (interp (parse '(/ 3 3))) 1)
+(check-exn (regexp (regexp-quote "VVQS unbound identifier:"))
+           (lambda () (interp (IdC 'a))))
