@@ -4,8 +4,8 @@
 
 (require typed/rackunit)
 
-(struct FundefC ([name : Symbol] [arg : Symbol] [body : ExprC]))
-(define-type ExprC (U NumC IdC AppC BinopC leq0))
+(struct FundefC ([name : Sexp] [arg : Sexp] [body : ExprC]))
+(define-type ExprC (U NumC IdC AppC BinopC leq0 FundefC))
 (struct NumC ([n : Real]))
 (struct IdC ([s : Symbol]))
 (struct AppC ([fun : Symbol] [arg : ExprC]))
@@ -40,10 +40,13 @@
 (define (parse [s : Sexp]) : ExprC
   (match s
     [(? real? n) (NumC n)]
+    [(? symbol? f) (IdC f)]
     [(list op arg1 arg2)
      (match op
        [(? binop? op) (BinopC (cast op binop) (parse arg1) (parse arg2))]
+       ['def (FundefC arg1 arg2 Sexp) (parse (third s)))]
        [_ (error 'parse "VVQS invalid list input ~e" s)])]
+    [(list f arg) (AppC (cast f Symbol) (parse arg))]
     [_ (error 'parse "VVQS invalid input ~e" s)]))
 
 
@@ -62,12 +65,9 @@
 (check-exn (regexp (regexp-quote "VVQS invalid list input"))
            (lambda () (parse (cast '(l 2 3) Sexp))))
 
-
-
 ; ---------------------------------------------------
 ; Interpreter and tests
 
-; Lookup table for binary operators
 (define (binop-exec [b : ExprC]) : Real
   (match b
     [(NumC n) n]
@@ -92,3 +92,16 @@
 (check-equal? (interp (parse '(/ 3 3))) 1)
 (check-exn (regexp (regexp-quote "VVQS unbound identifier:"))
            (lambda () (interp (IdC 'a))))
+
+; ---------------------------------------------------
+
+(define (parse-fundef [s : Sexp]) : FundefC
+  (match s
+    [(list 'def (list fun-name arg) '= body) 
+     (FundefC fun-name arg (parse body))]
+    [_ (error 'parse-fundef "VVQS invalid input ~e" s)]))
+
+; Test cases for parse-fundef
+(check-true (equal? (parse-fundef '(def (addone x) = (+ x 1))) (FundefC 'addone 'x (BinopC '+ (IdC 'x) (NumC 1)))))
+
+
