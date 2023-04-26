@@ -11,7 +11,7 @@
    #:transparent)
 (struct IdC ([s : Symbol])
    #:transparent)
-(struct AppC ([fun : ExprC] [arg : ExprC])
+(struct AppC ([arg : ExprC] [val : ExprC])
    #:transparent)
 (struct BinopC ([op : binop] [l : ExprC] [r : ExprC])
    #:transparent)
@@ -90,24 +90,27 @@
     ))
 
 ; Takes in an ExprC and evaluates it
-(define (interp [exp : ExprC]) : Real
+(define (interp [exp : ExprC] [funs : (Listof FundefC)]) : Real
   (match exp
     [(NumC n) n]
     [(IdC s) (error 'interp "VVQS unbound identifier: ~a" s)]
     [(BinopC op l r) (binop-exec exp)]
-    [(FundefC n a b) (interp b)]
-    ;[(AppC f a) (interp (AppC f a))]
-    ;[_ (error 'interp "VVQS invalid operator: ~a" exp)]
-    ))
+    [(FundefC n a b) (interp b funs)]
+    [(AppC f a)
+     (define f-fn (find-function f funs))
+     (match f-fn
+       [(FundefC n arg body) (interp (subst arg a body) funs)]
+       [_ (error 'interp "VVQS function not found: ~a" f)])]))
 
-(check-equal? (interp (NumC 2)) 2)
-(check-equal? (interp (parse '(+ 1 2))) 3)
-(check-equal? (interp (parse '(* 3 4))) 12)
-(check-equal? (interp (parse '(- 2 1))) 1)
-(check-equal? (interp (parse '(/ 3 3))) 1)
-(check-equal? (interp (FundefC 'a 'b  (parse '(/ 3 3)))) 1)
+(check-equal? (interp (NumC 2) '()) 2)
+(check-equal? (interp (parse '(+ 1 2)) '()) 3)
+(check-equal? (interp (parse '(* 3 4)) '()) 12)
+(check-equal? (interp (parse '(- 2 1)) '()) 1)
+(check-equal? (interp (parse '(/ 3 3)) '()) 1)
+(check-equal? (interp (FundefC 'a 'b  (parse '(/ 3 3))) '()) 1)
 (check-exn (regexp (regexp-quote "VVQS unbound identifier:"))
-           (lambda () (interp (IdC 'a))))
+           (lambda () (interp (IdC 'a) '())))
+
 
 ; ---------------------------------------------------
 
@@ -147,3 +150,48 @@
 (check-equal? (parse-prog '()) '())
 (check-exn (regexp (regexp-quote "VVQS invalid input"))
            (lambda () (parse-prog 'a)))
+
+; ---------------------------------------------------
+
+; Interprets the function named main from the function definitions.
+(define (interp-fns [funs : (Listof FundefC)]) : Real
+  (define main-fn (find-main funs))
+  (interp (AppC (IdC 'main) (NumC 0)) funs))
+
+; Finds the function named main in the list of FundefC
+(define (find-main [funs : (Listof FundefC)]) : FundefC
+  (cond [(empty? funs) (error 'find-main "VVQS main function not found")]
+        [(eq? (FundefC-name (first funs)) 'main) (first funs)]
+        [else (find-main (rest funs))]))
+
+
+; Finds the function with the given IdC in the list of FundefC
+(define (find-function [f : ExprC] [funs : (Listof FundefC)]) : (U FundefC #f)
+  (cond [(empty? funs) #f]
+        [(eq? (FundefC-name (first funs)) (IdC-s (cast f IdC))) (first funs)]
+        [else (find-function f (rest funs))]))
+
+(check-equal? (find-function (IdC 'a)
+                             (parse-prog '{{def {f x} = {+ x 14}}
+                                           {def {main init} = {f 2}}})) #f)
+(check-exn (regexp (regexp-quote "VVQS function not found:"))
+           (lambda () (interp (AppC (IdC 'a) (NumC 3))
+                              (parse-prog '{{def {f x} = {+ x 14}}
+                                           {def {main init} = {f 2}}}))))
+
+
+; Substitutes the given argument with the given value in the body of the function.
+(define (subst [arg : Sexp] [val : ExprC] [body : ExprC]) : ExprC
+  (match body
+    [(NumC n) body]
+    [(IdC s) (if (eq? s arg) val body)]
+    [(BinopC op l r) (BinopC op (subst arg val l) (subst arg val r))]
+    [(AppC f a) (AppC (subst arg val f) (subst arg val a))]))
+
+(check-equal? (interp-fns (parse-prog '{{def {f x} = {+ x 14}}
+                                        {def {main init} = {f 2}}}))
+              16)
+(check-equal? (interp-fns (list (FundefC 'main 'init (NumC 2)))) 2)
+(check-exn (regexp (regexp-quote "VVQS main function not found"))
+           (lambda () (interp-fns (list (FundefC 'not-main 'init (NumC 2))))))
+
