@@ -4,8 +4,8 @@
 
 (require typed/rackunit)
 
-(struct FundefC ([name : Sexp] [arg : Sexp] [body : ExprC]))
-(define-type ExprC (U NumC IdC AppC BinopC leq0 FundefC))
+(struct FundefC ([name : Symbol] [arg : Symbol] [body : ExprC]))
+(define-type ExprC (U NumC IdC AppC BinopC leq0))
 (struct NumC ([n : Real]))
 (struct IdC ([s : Symbol]))
 (struct AppC ([fun : ExprC] [arg : ExprC]))
@@ -23,6 +23,7 @@
         ['/ #t]
         [_ #f])
       (error 'binop? "VVQS given op was not a symbol ~e" v)))
+
 
 (check-true (binop? '+))
 (check-true (binop? '-))
@@ -68,6 +69,31 @@
 (check-exn (regexp (regexp-quote "VVQS invalid list input"))
            (lambda () (parse (cast '(l 2 3) Sexp))))
 
+;parses a FundefC from an s-expression
+(define (parse-fundef [s : Sexp]) : FundefC
+  (match s
+    [(list (list def (list name : Symbol para '= rest)))
+           (match s 
+             [(? symbol? x)
+              (match para
+                  [(? symbol? y) (FundefC x y (NumC 4))]
+                  )]
+             )(FundefC 'd 'x (NumC 4))]))
+
+
+check-true(parse-fundef '{def {f x} = {+ x 14}})
+
+;parses a list of function definitions from an s-expression
+(define (parse-prog [s : Sexp]) : (Listof FundefC)
+  (print s)
+  ;(port->list)
+  (match s
+    [(list arg : Sexp) (parse-prog arg)])
+  )
+
+check-true(parse-prog '{{def {f x} = {+ x 14}} {def {main init} = {f 2}}})
+check-true(parse-prog '(+ 1 2))
+
 ; ---------------------------------------------------
 ; Interpreter and tests
 
@@ -91,6 +117,15 @@
     ;[(AppC f a) (interp (AppC f a))]
     ;[_ (error 'interp "VVQS invalid operator: ~a" exp)]
     ))
+
+(define (interp-fns [funs : (Listof FundefC)]) : Real
+  (match funs
+    [(list def : FundefC) 5]
+    ))
+
+(: top-interp (Sexp -> Real))
+(define (top-interp fun-sexps)
+  (interp-fns (parse-prog fun-sexps)))
 
 (check-equal? (interp (NumC 2)) 2)
 (check-equal? (interp (parse '(+ 1 2))) 3)
