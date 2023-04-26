@@ -195,3 +195,13 @@
 (check-exn (regexp (regexp-quote "VVQS main function not found"))
            (lambda () (interp-fns (list (FundefC 'not-main 'init (NumC 2))))))
 
+; ---------------------------------------------------
+
+; Takes in a sexp (some code from our language) and evaluates it
+(define (top-interp [fun-sexps : Sexp]) : Real
+  (interp-fns (parse-prog fun-sexps)))
+
+(check-equal? (top-interp '{{def {f x} = {+ x 14}}
+                            {def {main init} = {f 2}}})
+              16)
+
