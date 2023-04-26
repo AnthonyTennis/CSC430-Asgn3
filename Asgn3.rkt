@@ -139,15 +139,17 @@
 ; ---------------------------------------------------
 
 ; Parses a list of s-expressions and returns a list of FundefC
+; Parses a list of s-expressions and returns a list of FundefC
 (define (parse-prog [s : Sexp]) : (Listof FundefC)
   (match s
-    [(list (? list? s1) rest)
-     (cons (parse-fundef s1) (parse-prog (list rest)))]
-    [(list (? list? s1))
-     (cons (parse-fundef s1) '())]
+    [(? list? ls)
+     (if (andmap list? ls)
+         (map parse-fundef ls)
+         (error 'parse-prog "VVQS invalid input ~e" s))]
     ['() '()]
     [_ (error 'parse-prog "VVQS invalid input ~e" s)]
     ))
+
 
 ; Test cases for parse-prog
 
@@ -222,6 +224,11 @@
 (check-equal? (top-interp '{{def {decrement x} = {leq0? x then x else {- x 1}}}
                              {def {main init} = {decrement 0}}})
               0)
+(check-equal? (top-interp '((def (realtwice x) = (+ x x)) 
+                            (def (main init) = (twice 15)) 
+                            (def (twice x) = (realtwice x))))
+              30)
+
 
 
 
