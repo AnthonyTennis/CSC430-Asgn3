@@ -4,13 +4,19 @@
 
 (require typed/rackunit)
 
-(struct FundefC ([name : Sexp] [arg : Sexp] [body : ExprC]))
+(struct FundefC ([name : Sexp] [arg : Sexp] [body : ExprC])
+  #:transparent)
 (define-type ExprC (U NumC IdC AppC BinopC leq0 FundefC))
-(struct NumC ([n : Real]))
-(struct IdC ([s : Symbol]))
-(struct AppC ([fun : ExprC] [arg : ExprC]))
-(struct BinopC ([op : binop] [l : ExprC] [r : ExprC]))
-(struct leq0 ([exp : ExprC]))
+(struct NumC ([n : Real])
+   #:transparent)
+(struct IdC ([s : Symbol])
+   #:transparent)
+(struct AppC ([fun : ExprC] [arg : ExprC])
+   #:transparent)
+(struct BinopC ([op : binop] [l : ExprC] [r : ExprC])
+   #:transparent)
+(struct leq0 ([exp : ExprC])
+   #:transparent)
 (define-type binop (U '+ '- '* '/))
 
 ; Determines if symbol is a valid operator
@@ -24,6 +30,7 @@
         [_ #f])
       (error 'binop? "VVQS given op was not a symbol ~e" v)))
 
+; test cases for binop?
 (check-true (binop? '+))
 (check-true (binop? '-))
 (check-true (binop? '*))
@@ -58,6 +65,7 @@
     [((NumC n1) (NumC n2)) (= n1 n2)]
     [((AppC a1 a2) (AppC b1 b2)) (and (exprc-equal? a1 b1) (exprc-equal? a2 b2))]))
 
+; test cases for exprc-equal? and parse
 (check-true (exprc-equal? (parse '(+ 1 2)) (BinopC '+ (NumC 1) (NumC 2))))
 (check-true (exprc-equal? (parse '(* 3 4)) (BinopC '* (NumC 3) (NumC 4))))
 (check-true (exprc-equal? (parse '(/ 10 5)) (BinopC '/ (NumC 10) (NumC 5))))
@@ -118,18 +126,24 @@
 ; ---------------------------------------------------
 
 ; Parses a list of s-expressions and returns a list of FundefC
-;(define (parse-prog [s : Sexp]) : (Listof FundefC)
-;  (match s
-;    [(list (? list? s1) rest)
-;     (cons (parse-fundef s1) (parse-prog rest))]
-;    ['() '()]
-;    [_ (error 'parse-prog "VVQS invalid input ~e" s)]))
+(define (parse-prog [s : Sexp]) : (Listof FundefC)
+  (match s
+    [(list (? list? s1) rest)
+     (cons (parse-fundef s1) (parse-prog (list rest)))]
+    [(list (? list? s1))
+     (cons (parse-fundef s1) '())]
+    ['() '()]
+    [_ (error 'parse-prog "VVQS invalid input ~e" s)]
+    ))
 
 ; Test cases for parse-prog
-;(check-equal? (parse-prog '{{def {f x} = {+ x 14}}
-;                             {def {main init} = {f 2}}})
-;              (list (FundefC 'f 'x (BinopC '+ (IdC 'x) (NumC 14)))
-;                    (FundefC 'main 'init (AppC (IdC 'f) (NumC 2)))))
-;(check-equal? (parse-prog '()) '())
-;(check-exn (regexp (regexp-quote "VVQS invalid input"))
-;           (lambda () (parse-prog 'a)))
+
+(check-equal? (parse-prog '{{def {f x} = {+ x 14}}})
+              (list (FundefC 'f 'x (BinopC '+ (IdC 'x) (NumC 14)))))
+(check-equal? (parse-prog '{{def {f x} = {+ x 14}}
+                             {def {main init} = {f 2}}})
+              (list (FundefC 'f 'x (BinopC '+ (IdC 'x) (NumC 14)))
+                    (FundefC 'main 'init (AppC (IdC 'f) (NumC 2)))))
+(check-equal? (parse-prog '()) '())
+(check-exn (regexp (regexp-quote "VVQS invalid input"))
+           (lambda () (parse-prog 'a)))
