@@ -1,6 +1,8 @@
 #lang typed/racket
 
 ;Authors: Anthony Teciorowski, Scott Hufschmidt
+; We were able to write all the necessary functions, however could not get to
+; writing the recursive rounding function and passing your test cases.
 
 (require typed/rackunit)
 
@@ -15,7 +17,7 @@
    #:transparent)
 (struct BinopC ([op : binop] [l : ExprC] [r : ExprC])
    #:transparent)
-(struct leq0 ([exp : ExprC])
+(struct leq0 ([test : ExprC] [then : ExprC] [else : ExprC])
    #:transparent)
 (define-type binop (U '+ '- '* '/))
 
@@ -53,6 +55,8 @@
        [(? binop? op) (BinopC (cast op binop) (parse arg1) (parse arg2))]
        [_ (error 'parse "VVQS invalid list input ~e" s)])]
     [(list f arg) (AppC (parse f) (parse arg))]
+    [(list 'leq0? test 'then then 'else else)
+     (leq0 (parse test) (parse then) (parse else))]
     [_ (error 'parse "VVQS invalid input ~e" s)]))
 
 
@@ -100,7 +104,12 @@
      (define f-fn (find-function f funs))
      (match f-fn
        [(FundefC n arg body) (interp (subst arg a body) funs)]
-       [_ (error 'interp "VVQS function not found: ~a" f)])]))
+       [_ (error 'interp "VVQS function not found: ~a" f)])]
+    [(leq0 test then else)
+     (if (<= (interp test funs) 0)
+         (interp then funs)
+         (interp else funs))]
+    ))
 
 (check-equal? (interp (NumC 2) '()) 2)
 (check-equal? (interp (parse '(+ 1 2)) '()) 3)
@@ -122,7 +131,8 @@
     [_ (error 'parse-fundef "VVQS invalid input ~e" s)]))
 
 ; Test cases for parse-fundef
-(check-true (exprc-equal? (parse-fundef '{def {addone x} = {+ x 1}}) (FundefC 'addone 'x (BinopC '+ (IdC 'x) (NumC 1)))))
+(check-true (exprc-equal? (parse-fundef '{def {addone x} = {+ x 1}})
+                          (FundefC 'addone 'x (BinopC '+ (IdC 'x) (NumC 1)))))
 (check-exn (regexp (regexp-quote "VVQS invalid input"))
            (lambda () (parse-fundef 'a)))
 
@@ -186,7 +196,9 @@
     [(NumC n) body]
     [(IdC s) (if (eq? s arg) val body)]
     [(BinopC op l r) (BinopC op (subst arg val l) (subst arg val r))]
-    [(AppC f a) (AppC (subst arg val f) (subst arg val a))]))
+    [(AppC f a) (AppC (subst arg val f) (subst arg val a))]
+    [(leq0 test then else)
+     (leq0 (subst arg val test) (subst arg val then) (subst arg val else))]))
 
 (check-equal? (interp-fns (parse-prog '{{def {f x} = {+ x 14}}
                                         {def {main init} = {f 2}}}))
@@ -204,4 +216,12 @@
 (check-equal? (top-interp '{{def {f x} = {+ x 14}}
                             {def {main init} = {f 2}}})
               16)
+(check-equal? (top-interp '{{def {decrement x} = {leq0? x then x else {- x 1}}}
+                             {def {main init} = {decrement 1}}})
+              0)
+(check-equal? (top-interp '{{def {decrement x} = {leq0? x then x else {- x 1}}}
+                             {def {main init} = {decrement 0}}})
+              0)
+
+
 
